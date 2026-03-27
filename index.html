@@ -47,24 +47,24 @@ const { useState, useEffect, useRef, useCallback } = React;
 // DEMO DATA
 // ============================================================
 const SALES_STAFF = [
-  { id: 'S01', name: '陳怡君', phone: '0912-345-678', email: 'yijun@travel.tw' },
-  { id: 'S02', name: '林威廷', phone: '0923-456-789', email: 'weiting@travel.tw' },
-  { id: 'S03', name: '王詩涵', phone: '0934-567-890', email: 'shihan@travel.tw' },
-  { id: 'S04', name: '張明道', phone: '0945-678-901', email: 'mingdao@travel.tw' },
-  { id: 'S05', name: '李佳穎', phone: '0956-789-012', email: 'jiaying@travel.tw' },
+  { id: 'S01', name: '小胖', phone: '02-2711-4567', email: 'xiaopang@jhtour.com.tw' },
+  { id: 'S02', name: 'Jeff', phone: '02-2711-4568', email: 'jeff@jhtour.com.tw' },
+  { id: 'S03', name: '劉俊蓮', phone: '02-2711-4569', email: 'apple@jhtour.com.tw' },
+  { id: 'S04', name: '劉怡辰', phone: '02-2711-4570', email: 'yichen@jhtour.com.tw' },
+  { id: 'S05', name: '喵喵', phone: '02-2711-4571', email: 'miaomiao@jhtour.com.tw' },
 ];
 
 const PACKAGES = [
-  { id: 'P01', name: '日本本州賞楓5日', dest: '日本', days: 5, price: 29800, cost: 22000 },
-  { id: 'P02', name: '韓國首爾4日', dest: '韓國', days: 4, price: 19800, cost: 14500 },
-  { id: 'P03', name: '泰國曼谷芭提雅5日', dest: '泰國', days: 5, price: 15800, cost: 11000 },
-  { id: 'P04', name: '歐洲10國精華10日', dest: '歐洲', days: 10, price: 89800, cost: 68000 },
-  { id: 'P05', name: '北海道雪祭6日', dest: '日本', days: 6, price: 39800, cost: 29500 },
-  { id: 'P06', name: '沖繩海島4日', dest: '日本', days: 4, price: 22800, cost: 16500 },
-  { id: 'P07', name: '峇里島蜜月5日', dest: '印尼', days: 5, price: 25800, cost: 18000 },
-  { id: 'P08', name: '澳洲雪梨黃金海岸8日', dest: '澳洲', days: 8, price: 65800, cost: 50000 },
-  { id: 'P09', name: '北歐四國10日', dest: '歐洲', days: 10, price: 119800, cost: 92000 },
-  { id: 'P10', name: '土耳其全覽10日', dest: '土耳其', days: 10, price: 75800, cost: 58000 },
+  { id: 'P01', name: '日本北陸立山黑部雪壁6日', dest: '日本', days: 6, price: 39800, cost: 29500, type: '主打' },
+  { id: 'P02', name: '日本關西春櫻賞花5日', dest: '日本', days: 5, price: 28800, cost: 21000, type: '季節限定' },
+  { id: 'P03', name: '日本四國遍路文化探索7日', dest: '日本', days: 7, price: 42800, cost: 32000, type: '深度文化' },
+  { id: 'P04', name: '日本北海道雪祭溫泉5日', dest: '日本', days: 5, price: 36800, cost: 27000, type: '季節限定' },
+  { id: 'P05', name: '韓國首爾濟州深度5日', dest: '韓國', days: 5, price: 22800, cost: 16500, type: '主打' },
+  { id: 'P06', name: '歐洲法瑞義精華10日', dest: '歐洲', days: 10, price: 98800, cost: 75000, type: '長程線' },
+  { id: 'P07', name: '歐洲冰島極光探索10日', dest: '歐洲', days: 10, price: 128800, cost: 98000, type: '長程線' },
+  { id: 'P08', name: '斯里蘭卡文化古都8日', dest: '南亞', days: 8, price: 65800, cost: 50000, type: '長程線' },
+  { id: 'P09', name: '峇里島蜜月浪漫5日', dest: '印尼', days: 5, price: 25800, cost: 18000, type: '蜜月' },
+  { id: 'P10', name: '台灣東部太平山深度4日', dest: '台灣', days: 4, price: 12800, cost: 9000, type: '國旅' },
 ];
 
 const ORDER_STATUSES = ['報名', '已付訂金', '已付全額', '已出團', '已結團'];
@@ -88,7 +88,7 @@ const CUSTOMERS_SEED = Array.from({length:30}, (_,i) => {
   const expYear = randInt(2024, 2030);
   const passExpiry = `${expYear}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`;
   const tags = [];
-  const tagPool = ['日本控','歐洲控','家庭旅遊','背包客','豪華旅遊','銀髮族','蜜月旅遊','學生族'];
+  const tagPool = ['日本控','歐洲控','台灣控','家庭旅遊','豪華旅遊','銀髮族','蜜月旅遊','員工旅遊'];
   const tc = randInt(1,3);
   const shuffled = [...tagPool].sort(()=>Math.random()-0.5);
   for(let j=0;j<tc;j++) tags.push(shuffled[j]);
@@ -247,7 +247,7 @@ function Pill({ label, color='blue' }) {
 }
 
 function tagColor(tag) {
-  const m = { '日本控':'red','歐洲控':'purple','家庭旅遊':'green','背包客':'amber','豪華旅遊':'blue','銀髮族':'cyan','蜜月旅遊':'purple','學生族':'amber' };
+  const m = { '日本控':'red','歐洲控':'purple','台灣控':'green','家庭旅遊':'green','豪華旅遊':'blue','銀髮族':'cyan','蜜月旅遊':'purple','員工旅遊':'amber' };
   return m[tag] || 'blue';
 }
 
@@ -1468,10 +1468,10 @@ function App() {
             </nav>
             <div className="ml-auto flex items-center gap-3 flex-shrink-0">
               <div className="text-right hidden md:block">
-                <div className="text-sm font-medium">陳怡君</div>
+                <div className="text-sm font-medium">劉怡辰</div>
                 <div className="text-xs text-brand-300">系統管理員</div>
               </div>
-              <div className="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center font-bold text-sm">陳</div>
+              <div className="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center font-bold text-sm">劉</div>
             </div>
           </div>
         </div>
@@ -1484,7 +1484,7 @@ function App() {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs text-slate-400 border-t border-slate-200 mt-8">
-        吉航旅行社 v1.0 POC — 旅行社管理系統示範版 · 2026
+        吉航旅行社 v1.0 POC — 旅行社管理系統示範版 · 2026　｜　台北市中山區復興北路38號10樓　｜　02-2711-4567
       </footer>
     </div>
   );
