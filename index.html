@@ -368,7 +368,7 @@ function TabOrders() {
                   <td className="px-4 py-3 text-center">{o.pax}</td>
                   <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtCurrency(o.total)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`${o.paid>=o.total?'text-emerald-600':'o.paid>0?text-amber-600':'text-slate-400'} font-medium`}>
+                    <span className={`${o.paid>=o.total?'text-emerald-600':o.paid>0?'text-amber-600':'text-slate-400'} font-medium`}>
                       {fmtCurrency(o.paid)}
                     </span>
                   </td>
