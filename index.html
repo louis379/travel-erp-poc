@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>旅航 ERP — 旅行社管理系統</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              400: '#2dd4bf',
+              500: '#06b6d4',
+              600: '#0891b2',
+              700: '#0e7490',
+              800: '#155e75',
+              900: '#164e63',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: #f1f5f9; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+    .status-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body class="bg-brand-50 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ============================================================
+// DEMO DATA
+// ============================================================
+const SALES_STAFF = [
+  { id: 'S01', name: '陳怡君', phone: '0912-345-678', email: 'yijun@travel.tw' },
+  { id: 'S02', name: '林威廷', phone: '0923-456-789', email: 'weiting@travel.tw' },
+  { id: 'S03', name: '王詩涵', phone: '0934-567-890', email: 'shihan@travel.tw' },
+  { id: 'S04', name: '張明道', phone: '0945-678-901', email: 'mingdao@travel.tw' },
+  { id: 'S05', name: '李佳穎', phone: '0956-789-012', email: 'jiaying@travel.tw' },
+];
+
+const PACKAGES = [
+  { id: 'P01', name: '日本本州賞楓5日', dest: '日本', days: 5, price: 29800, cost: 22000 },
+  { id: 'P02', name: '韓國首爾4日', dest: '韓國', days: 4, price: 19800, cost: 14500 },
+  { id: 'P03', name: '泰國曼谷芭提雅5日', dest: '泰國', days: 5, price: 15800, cost: 11000 },
+  { id: 'P04', name: '歐洲10國精華10日', dest: '歐洲', days: 10, price: 89800, cost: 68000 },
+  { id: 'P05', name: '北海道雪祭6日', dest: '日本', days: 6, price: 39800, cost: 29500 },
+  { id: 'P06', name: '沖繩海島4日', dest: '日本', days: 4, price: 22800, cost: 16500 },
+  { id: 'P07', name: '峇里島蜜月5日', dest: '印尼', days: 5, price: 25800, cost: 18000 },
+  { id: 'P08', name: '澳洲雪梨黃金海岸8日', dest: '澳洲', days: 8, price: 65800, cost: 50000 },
+  { id: 'P09', name: '北歐四國10日', dest: '歐洲', days: 10, price: 119800, cost: 92000 },
+  { id: 'P10', name: '土耳其全覽10日', dest: '土耳其', days: 10, price: 75800, cost: 58000 },
+];
+
+const ORDER_STATUSES = ['報名', '已付訂金', '已付全額', '已出團', '已結團'];
+const PAY_METHODS = ['匯款', '信用卡', 'LINE Pay', '現金'];
+const BANKS = ['台灣銀行', '國泰世華', '中信銀行', '玉山銀行', '富邦銀行'];
+
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function randPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function padZ(n, w=2) { return String(n).padStart(w, '0'); }
+function fmtDate(d) { return `${d.getFullYear()}-${padZ(d.getMonth()+1)}-${padZ(d.getDate())}`; }
+function addDays(d, n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+
+const SURNAMES = ['陳','林','王','張','李','吳','劉','黃','蔡','楊','許','鄭','謝','洪','邱','曾','廖','賴','徐','周'];
+const GIVEN = ['怡君','明道','佳穎','志偉','雅婷','冠宇','靜宜','建宏','秀珍','宗翰','思穎','文凱','淑惠','柏翰','曉婷','俊豪','雅雯','昱廷','慧玲','志豪'];
+function randName() { return randPick(SURNAMES)+randPick(GIVEN); }
+function randPhone() { return `09${padZ(randInt(10,99),2)}-${padZ(randInt(100,999),3)}-${padZ(randInt(100,999),3)}`; }
+function randPassport() { return `${String.fromCharCode(65+randInt(0,25))}${padZ(randInt(10000000,99999999),8)}`; }
+
+const CUSTOMERS_SEED = Array.from({length:30}, (_,i) => {
+  const name = randName();
+  const expYear = randInt(2024, 2030);
+  const passExpiry = `${expYear}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`;
+  const tags = [];
+  const tagPool = ['日本控','歐洲控','家庭旅遊','背包客','豪華旅遊','銀髮族','蜜月旅遊','學生族'];
+  const tc = randInt(1,3);
+  const shuffled = [...tagPool].sort(()=>Math.random()-0.5);
+  for(let j=0;j<tc;j++) tags.push(shuffled[j]);
+  return {
+    id: `C${padZ(i+1,3)}`,
+    name,
+    phone: randPhone(),
+    lineId: `line_${name.toLowerCase().replace(/[^a-z]/g,'')}${randInt(10,99)}`,
+    passExpiry,
+    tags,
+    salesId: randPick(SALES_STAFF).id,
+    totalSpent: 0,
+    orderCount: 0,
+  };
+});
+
+const ORDERS_SEED = (() => {
+  const orders = [];
+  const base = new Date('2025-11-01');
+  for(let i=0;i<52;i++) {
+    const pkg = randPick(PACKAGES);
+    const customer = randPick(CUSTOMERS_SEED);
+    const pax = randInt(1,4);
+    const total = pkg.price * pax;
+    const deposit = Math.round(total * 0.3);
+    const orderDate = addDays(base, randInt(0,120));
+    const depDate = addDays(orderDate, randInt(14,60));
+    const statusIdx = randInt(0, ORDER_STATUSES.length-1);
+    const status = ORDER_STATUSES[statusIdx];
+    const payMethod = randPick(PAY_METHODS);
+    const salesId = randPick(SALES_STAFF).id;
+    const groupNo = `TG${padZ(2025+(i>30?1:0),4)}${padZ(i+1,4)}`;
+    customer.totalSpent += (statusIdx >= 2 ? total : deposit);
+    customer.orderCount += 1;
+    orders.push({
+      id: `ORD${padZ(i+1,5)}`,
+      groupNo,
+      packageId: pkg.id,
+      packageName: pkg.name,
+      dest: pkg.dest,
+      days: pkg.days,
+      pax,
+      total,
+      deposit,
+      paid: statusIdx >= 3 ? total : (statusIdx >= 1 ? deposit : 0),
+      status,
+      payMethod,
+      orderDate: fmtDate(orderDate),
+      depDate: fmtDate(depDate),
+      salesId,
+      customerId: customer.id,
+      customerName: customer.name,
+      passengers: Array.from({length:pax}, (_,j)=> ({
+        name: j===0 ? customer.name : randName(),
+        passport: randPassport(),
+        birth: `${randInt(1960,2005)}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`,
+      })),
+    });
+  }
+  return orders;
+})();
+
+// Accounting entries auto-generated from orders
+const ACCOUNTS = [
+  { code:'1101', name:'現金', type:'資產' },
+  { code:'1102', name:'銀行存款', type:'資產' },
+  { code:'1103', name:'應收帳款', type:'資產' },
+  { code:'2101', name:'應付帳款', type:'負債' },
+  { code:'2171', name:'應付營業稅', type:'負債' },
+  { code:'4101', name:'團費收入', type:'收入' },
+  { code:'4102', name:'機票代收', type:'收入' },
+  { code:'4103', name:'簽證代收', type:'收入' },
+  { code:'5101', name:'航空公司應付', type:'費用' },
+  { code:'5102', name:'飯店應付', type:'費用' },
+  { code:'5103', name:'地接應付', type:'費用' },
+  { code:'5104', name:'簽證費用', type:'費用' },
+];
+
+const JOURNAL_ENTRIES = (() => {
+  const entries = [];
+  ORDERS_SEED.forEach((o,i) => {
+    if(o.paid > 0) {
+      const acct = o.payMethod === '現金' ? '1101' : '1102';
+      entries.push({
+        id: `J${padZ(i*2+1,5)}`,
+        date: o.orderDate,
+        orderId: o.id,
+        desc: `收${o.customerName}訂金 - ${o.packageName}`,
+        entries: [
+          { account:'1102', accountName:'銀行存款', debit: o.paid, credit: 0 },
+          { account:'4101', accountName:'團費收入', debit: 0, credit: Math.round(o.paid/1.05) },
+          { account:'2171', accountName:'應付營業稅', debit: 0, credit: o.paid - Math.round(o.paid/1.05) },
+        ],
+        isInner: false,
+        type: o.payMethod,
+      });
+      if(o.status === '已出團' || o.status === '已結團') {
+        const pkg = PACKAGES.find(p=>p.id===o.packageId);
+        const cost = pkg ? pkg.cost * o.pax : Math.round(o.total*0.75);
+        entries.push({
+          id: `J${padZ(i*2+2,5)}`,
+          date: o.depDate,
+          orderId: o.id,
+          desc: `支付供應商 - ${o.packageName} x${o.pax}人`,
+          entries: [
+            { account:'5101', accountName:'航空公司應付', debit: Math.round(cost*0.4), credit: 0 },
+            { account:'5102', accountName:'飯店應付', debit: Math.round(cost*0.35), credit: 0 },
+            { account:'5103', accountName:'地接應付', debit: Math.round(cost*0.2), credit: 0 },
+            { account:'5104', accountName:'簽證費用', debit: Math.round(cost*0.05), credit: 0 },
+            { account:'2101', accountName:'應付帳款', debit: 0, credit: cost },
+          ],
+          isInner: true,
+          type: '匯款',
+        });
+      }
+    }
+  });
+  return entries;
+})();
+
+// ============================================================
+// UTILS
+// ============================================================
+const fmt = (n) => new Intl.NumberFormat('zh-TW').format(n);
+const fmtCurrency = (n) => `NT$${fmt(n)}`;
+
+function StatusBadge({ status }) {
+  const colors = {
+    '報名': 'bg-slate-100 text-slate-700',
+    '已付訂金': 'bg-amber-100 text-amber-700',
+    '已付全額': 'bg-blue-100 text-blue-700',
+    '已出團': 'bg-brand-100 text-brand-700',
+    '已結團': 'bg-emerald-100 text-emerald-700',
+  };
+  return <span className={`status-badge ${colors[status]||'bg-gray-100 text-gray-700'}`}>{status}</span>;
+}
+
+function Modal({ title, onClose, children, size='md' }) {
+  const sizes = { sm:'max-w-md', md:'max-w-2xl', lg:'max-w-4xl', xl:'max-w-6xl' };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className={`bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] flex flex-col`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-brand-900">{title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="overflow-y-auto scrollbar-thin flex-1 p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Pill({ label, color='blue' }) {
+  const cs = { blue:'bg-blue-100 text-blue-700', green:'bg-emerald-100 text-emerald-700', purple:'bg-purple-100 text-purple-700', amber:'bg-amber-100 text-amber-700', red:'bg-red-100 text-red-700', cyan:'bg-cyan-100 text-cyan-700' };
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cs[color]||cs.blue}`}>{label}</span>;
+}
+
+function tagColor(tag) {
+  const m = { '日本控':'red','歐洲控':'purple','家庭旅遊':'green','背包客':'amber','豪華旅遊':'blue','銀髮族':'cyan','蜜月旅遊':'purple','學生族':'amber' };
+  return m[tag] || 'blue';
+}
+
+// ============================================================
+// TAB 1: ORDER MANAGEMENT
+// ============================================================
+function TabOrders() {
+  const [orders, setOrders] = useState(ORDERS_SEED);
+  const [filterStatus, setFilterStatus] = useState('全部');
+  const [filterDest, setFilterDest] = useState('全部');
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [viewOrder, setViewOrder] = useState(null);
+  const [editStatus, setEditStatus] = useState(null);
+  const [form, setForm] = useState({ packageId:'P01', pax:2, payMethod:'匯款', depDate:'', customerName:'', salesId:'S01', passengers:[{name:'',passport:'',birth:''}] });
+
+  const dests = ['全部',...new Set(PACKAGES.map(p=>p.dest))];
+  const statuses = ['全部',...ORDER_STATUSES];
+
+  const filtered = orders.filter(o => {
+    if(filterStatus !== '全部' && o.status !== filterStatus) return false;
+    if(filterDest !== '全部' && o.dest !== filterDest) return false;
+    if(search && !o.customerName.includes(search) && !o.groupNo.includes(search) && !o.packageName.includes(search)) return false;
+    return true;
+  });
+
+  const stats = {
+    total: orders.length,
+    revenue: orders.filter(o=>o.paid>0).reduce((a,b)=>a+b.paid,0),
+    pending: orders.filter(o=>o.status==='報名'||o.status==='已付訂金').length,
+    departed: orders.filter(o=>o.status==='已出團'||o.status==='已結團').length,
+  };
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const pkg = PACKAGES.find(p=>p.id===form.packageId);
+    const total = pkg.price * form.pax;
+    const newOrder = {
+      id: `ORD${padZ(orders.length+1,5)}`,
+      groupNo: `TG${new Date().getFullYear()}${padZ(orders.length+1,4)}`,
+      packageId: pkg.id,
+      packageName: pkg.name,
+      dest: pkg.dest,
+      days: pkg.days,
+      pax: Number(form.pax),
+      total,
+      deposit: Math.round(total*0.3),
+      paid: 0,
+      status: '報名',
+      payMethod: form.payMethod,
+      orderDate: fmtDate(new Date()),
+      depDate: form.depDate,
+      salesId: form.salesId,
+      customerId: 'C999',
+      customerName: form.customerName || '新客戶',
+      passengers: form.passengers,
+    };
+    setOrders(prev=>[newOrder,...prev]);
+    setShowModal(false);
+    setForm({ packageId:'P01', pax:2, payMethod:'匯款', depDate:'', customerName:'', salesId:'S01', passengers:[{name:'',passport:'',birth:''}] });
+  }
+
+  function updateStatus(orderId, newStatus) {
+    setOrders(prev=>prev.map(o=>o.id===orderId ? {...o, status:newStatus, paid: newStatus==='已付全額'||newStatus==='已出團'||newStatus==='已結團' ? o.total : (newStatus==='已付訂金'?o.deposit:o.paid)} : o));
+    setEditStatus(null);
+  }
+
+  return (
+    <div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label:'總訂單', value:stats.total, icon:'📋', color:'bg-brand-600' },
+          { label:'總收款', value:fmtCurrency(stats.revenue), icon:'💰', color:'bg-emerald-600' },
+          { label:'待處理', value:stats.pending, icon:'⏳', color:'bg-amber-500' },
+          { label:'已出團', value:stats.departed, icon:'✈️', color:'bg-purple-600' },
+        ].map(s=>(
+          <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-3">
+            <div className={`${s.color} text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl`}>{s.icon}</div>
+            <div>
+              <div className="text-xs text-slate-500">{s.label}</div>
+              <div className="text-lg font-bold text-slate-800">{s.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜尋訂單、客戶、團號..." className="border border-slate-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-40 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+          {statuses.map(s=><option key={s}>{s}</option>)}
+        </select>
+        <select value={filterDest} onChange={e=>setFilterDest(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+          {dests.map(d=><option key={d}>{d}</option>)}
+        </select>
+        <button onClick={()=>setShowModal(true)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <span>＋</span> 新增訂單
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{['團號','客戶','行程','出發日','人數','金額','已付','付款','狀態','業務','操作'].map(h=>(
+                <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {filtered.map((o,i)=>(
+                <tr key={o.id} className={`border-b border-slate-100 hover:bg-brand-50 transition-colors ${i%2===0?'':'bg-slate-50/30'}`}>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{o.groupNo}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{o.customerName}</td>
+                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-40 truncate">{o.packageName}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{o.depDate}</td>
+                  <td className="px-4 py-3 text-center">{o.pax}</td>
+                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtCurrency(o.total)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`${o.paid>=o.total?'text-emerald-600':'o.paid>0?text-amber-600':'text-slate-400'} font-medium`}>
+                      {fmtCurrency(o.paid)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{o.payMethod}</span>
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge status={o.status}/></td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{SALES_STAFF.find(s=>s.id===o.salesId)?.name||'-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap flex gap-2">
+                    <button onClick={()=>setViewOrder(o)} className="text-brand-600 hover:text-brand-800 text-xs font-medium">詳情</button>
+                    <button onClick={()=>setEditStatus(o)} className="text-amber-600 hover:text-amber-800 text-xs font-medium">更新</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length===0 && <div className="text-center py-12 text-slate-400">無符合條件的訂單</div>}
+        </div>
+        <div className="px-4 py-3 text-sm text-slate-500 border-t border-slate-100">共 {filtered.length} 筆 / 總計 {orders.length} 筆</div>
+      </div>
+
+      {/* New Order Modal */}
+      {showModal && (
+        <Modal title="新增旅遊訂單" onClose={()=>setShowModal(false)} size="lg">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">行程方案</label>
+                <select value={form.packageId} onChange={e=>setForm({...form,packageId:e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400">
+                  {PACKAGES.map(p=><option key={p.id} value={p.id}>{p.name} — {fmtCurrency(p.price)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">出發日期</label>
+                <input type="date" value={form.depDate} onChange={e=>setForm({...form,depDate:e.target.value})} required className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">人數</label>
+                <input type="number" min="1" max="20" value={form.pax} onChange={e=>{
+                  const n=Number(e.target.value);
+                  const p=[...Array(n)].map((_,i)=>form.passengers[i]||{name:'',passport:'',birth:''});
+                  setForm({...form,pax:n,passengers:p});
+                }} className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">主聯絡人姓名</label>
+                <input value={form.customerName} onChange={e=>setForm({...form,customerName:e.target.value})} required className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400" placeholder="王小明" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">付款方式</label>
+                <select value={form.payMethod} onChange={e=>setForm({...form,payMethod:e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400">
+                  {PAY_METHODS.map(m=><option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">負責業務</label>
+                <select value={form.salesId} onChange={e=>setForm({...form,salesId:e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400">
+                  {SALES_STAFF.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+            </div>
+            {/* Price summary */}
+            <div className="bg-brand-50 border border-brand-200 rounded-xl p-4">
+              {(() => {
+                const pkg = PACKAGES.find(p=>p.id===form.packageId);
+                const total = pkg.price * form.pax;
+                return (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">{pkg.name} × {form.pax} 人</span>
+                    <div className="text-right">
+                      <div className="font-bold text-brand-800 text-lg">{fmtCurrency(total)}</div>
+                      <div className="text-xs text-slate-500">訂金 {fmtCurrency(Math.round(total*0.3))}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            {/* Passengers */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">旅客資料</label>
+              <div className="space-y-3">
+                {form.passengers.map((p,i)=>(
+                  <div key={i} className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-lg">
+                    <input value={p.name} onChange={e=>{const ps=[...form.passengers];ps[i]={...ps[i],name:e.target.value};setForm({...form,passengers:ps});}} placeholder={`旅客${i+1}姓名`} className="border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                    <input value={p.passport} onChange={e=>{const ps=[...form.passengers];ps[i]={...ps[i],passport:e.target.value};setForm({...form,passengers:ps});}} placeholder="護照號碼" className="border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                    <input type="date" value={p.birth} onChange={e=>{const ps=[...form.passengers];ps[i]={...ps[i],birth:e.target.value};setForm({...form,passengers:ps});}} className="border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button type="button" onClick={()=>setShowModal(false)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">取消</button>
+              <button type="submit" className="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium">建立訂單</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* View Order Modal */}
+      {viewOrder && (
+        <Modal title={`訂單詳情 — ${viewOrder.groupNo}`} onClose={()=>setViewOrder(null)} size="lg">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {[
+                ['客戶', viewOrder.customerName],
+                ['行程', viewOrder.packageName],
+                ['目的地', viewOrder.dest],
+                ['天數', `${viewOrder.days} 天`],
+                ['出發日', viewOrder.depDate],
+                ['人數', `${viewOrder.pax} 人`],
+                ['訂單日', viewOrder.orderDate],
+                ['付款方式', viewOrder.payMethod],
+                ['業務', SALES_STAFF.find(s=>s.id===viewOrder.salesId)?.name||'-'],
+                ['狀態', <StatusBadge key="s" status={viewOrder.status}/>],
+              ].map(([k,v])=>(
+                <div key={k} className="flex justify-between border-b border-slate-100 pb-2">
+                  <span className="text-slate-500">{k}</span>
+                  <span className="font-medium text-slate-800">{v}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-brand-50 rounded-xl p-4 text-sm">
+              <div className="flex justify-between mb-2"><span>總金額</span><span className="font-bold text-brand-800">{fmtCurrency(viewOrder.total)}</span></div>
+              <div className="flex justify-between mb-2"><span>已付款</span><span className="font-bold text-emerald-600">{fmtCurrency(viewOrder.paid)}</span></div>
+              <div className="flex justify-between"><span>待付款</span><span className="font-bold text-red-500">{fmtCurrency(viewOrder.total-viewOrder.paid)}</span></div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-700 mb-2">旅客清單</div>
+              <div className="space-y-2">
+                {viewOrder.passengers.map((p,i)=>(
+                  <div key={i} className="bg-slate-50 rounded-lg px-4 py-2 text-sm flex justify-between">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-slate-500 font-mono">{p.passport}</span>
+                    <span className="text-slate-500">{p.birth}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Update Status Modal */}
+      {editStatus && (
+        <Modal title={`更新訂單狀態 — ${editStatus.groupNo}`} onClose={()=>setEditStatus(null)} size="sm">
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">目前狀態：<StatusBadge status={editStatus.status}/></p>
+            <div className="grid grid-cols-1 gap-2">
+              {ORDER_STATUSES.map(s=>(
+                <button key={s} onClick={()=>updateStatus(editStatus.id,s)}
+                  className={`w-full text-left px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${s===editStatus.status?'border-brand-500 bg-brand-50 text-brand-700':'border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TAB 2: FINANCE
+// ============================================================
+function TabFinance() {
+  const [showInner, setShowInner] = useState(false);
+  const [filterType, setFilterType] = useState('全部');
+  const [filterMonth, setFilterMonth] = useState('全部');
+  const [activeView, setActiveView] = useState('journal'); // journal | accounts | voucher | bank
+
+  const entries = JOURNAL_ENTRIES.filter(e => {
+    if(!showInner && e.isInner) return false;
+    if(filterType!=='全部' && e.type!==filterType) return false;
+    if(filterMonth!=='全部' && !e.date.startsWith(filterMonth)) return false;
+    return true;
+  });
+
+  const months = ['全部',...new Set(JOURNAL_ENTRIES.map(e=>e.date.substring(0,7))).values()].sort();
+  const totalRevenue = JOURNAL_ENTRIES.filter(e=>!e.isInner).reduce((a,b)=>a+b.entries.filter(x=>x.account==='4101').reduce((c,d)=>c+d.credit,0),0);
+  const totalCost = JOURNAL_ENTRIES.filter(e=>e.isInner).reduce((a,b)=>a+b.entries.filter(x=>x.debit>0).reduce((c,d)=>c+d.debit,0),0);
+  const totalTax = JOURNAL_ENTRIES.filter(e=>!e.isInner).reduce((a,b)=>a+b.entries.filter(x=>x.account==='2171').reduce((c,d)=>c+d.credit,0),0);
+
+  // Account balances
+  const accountBalances = ACCOUNTS.map(acc => {
+    let debit=0, credit=0;
+    JOURNAL_ENTRIES.forEach(je => {
+      je.entries.forEach(e => {
+        if(e.account===acc.code) { debit+=e.debit; credit+=e.credit; }
+      });
+    });
+    return { ...acc, debit, credit, balance: (acc.type==='資產'||acc.type==='費用') ? debit-credit : credit-debit };
+  });
+
+  const bankTransactions = ORDERS_SEED.filter(o=>o.paid>0&&o.payMethod==='匯款').map(o=>({
+    date: o.orderDate,
+    desc: `${o.customerName} — ${o.packageName}`,
+    amount: o.paid,
+    bank: randPick(BANKS),
+    matched: Math.random()>0.15,
+  })).sort((a,b)=>a.date.localeCompare(b.date));
+
+  return (
+    <div>
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label:'稅前收入', value:fmtCurrency(totalRevenue), icon:'📈', color:'bg-emerald-600' },
+          { label:'應付費用', value:fmtCurrency(totalCost), icon:'📉', color:'bg-red-500' },
+          { label:'應付營業稅', value:fmtCurrency(totalTax), icon:'🧾', color:'bg-amber-500' },
+          { label:'稅後毛利', value:fmtCurrency(totalRevenue-totalCost-totalTax), icon:'💎', color:'bg-brand-600' },
+        ].map(s=>(
+          <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-3">
+            <div className={`${s.color} text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl`}>{s.icon}</div>
+            <div>
+              <div className="text-xs text-slate-500">{s.label}</div>
+              <div className="text-base font-bold text-slate-800">{s.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          {[['journal','流水帳'],['accounts','科目餘額'],['voucher','傳票'],['bank','銀行對帳']].map(([v,l])=>(
+            <button key={v} onClick={()=>setActiveView(v)} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeView===v?'bg-white shadow text-brand-700':'text-slate-600 hover:text-slate-800'}`}>{l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <div onClick={()=>setShowInner(!showInner)} className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${showInner?'bg-brand-500':'bg-slate-300'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInner?'translate-x-5':'translate-x-0.5'}`}/>
+            </div>
+            <span className={showInner?'text-brand-700 font-medium':'text-slate-500'}>顯示內帳</span>
+          </label>
+          <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+            {months.map(m=><option key={m}>{m}</option>)}
+          </select>
+          <select value={filterType} onChange={e=>setFilterType(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+            {['全部',...PAY_METHODS].map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Views */}
+      {activeView==='journal' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>{['日期','傳票號','摘要','金流','內/外帳','借方','貸方'].map(h=>(
+                  <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {entries.map((je,i)=>(
+                  je.entries.map((e,j)=>(
+                    <tr key={`${je.id}-${j}`} className={`border-b border-slate-100 hover:bg-brand-50 ${j===0?(i%2===0?'':'bg-slate-50/30'):'bg-white/50'}`}>
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{j===0?je.date:''}</td>
+                      <td className="px-4 py-2 font-mono text-xs text-slate-400">{j===0?je.id:''}</td>
+                      <td className="px-4 py-2 text-slate-700">{j===0?je.desc:<span className="ml-4 text-slate-500">— {e.accountName} ({e.account})</span>}</td>
+                      <td className="px-4 py-2">{j===0?<span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{je.type}</span>:''}</td>
+                      <td className="px-4 py-2">{j===0?<span className={`text-xs px-2 py-0.5 rounded ${je.isInner?'bg-orange-100 text-orange-700':'bg-green-100 text-green-700'}`}>{je.isInner?'內帳':'外帳'}</span>:''}</td>
+                      <td className="px-4 py-2 text-right text-red-600">{e.debit>0?fmt(e.debit):''}</td>
+                      <td className="px-4 py-2 text-right text-emerald-600">{e.credit>0?fmt(e.credit):''}</td>
+                    </tr>
+                  ))
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeView==='accounts' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{['科目代號','科目名稱','類別','借方累計','貸方累計','餘額'].map(h=>(
+                <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {accountBalances.map((a,i)=>(
+                <tr key={a.code} className={`border-b border-slate-100 hover:bg-brand-50 ${i%2===0?'':'bg-slate-50/30'}`}>
+                  <td className="px-4 py-3 font-mono text-slate-500">{a.code}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">{a.name}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      a.type==='資產'?'bg-blue-100 text-blue-700':
+                      a.type==='負債'?'bg-red-100 text-red-700':
+                      a.type==='收入'?'bg-emerald-100 text-emerald-700':
+                      'bg-orange-100 text-orange-700'
+                    }`}>{a.type}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-red-600">{a.debit>0?fmt(a.debit):'-'}</td>
+                  <td className="px-4 py-3 text-right text-emerald-600">{a.credit>0?fmt(a.credit):'-'}</td>
+                  <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(a.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeView==='voucher' && (
+        <div className="space-y-4">
+          {entries.slice(0,10).map(je=>(
+            <div key={je.id} className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="text-xs text-slate-400 font-mono">{je.id}</div>
+                  <div className="font-bold text-slate-800">{je.desc}</div>
+                  <div className="text-xs text-slate-500 mt-1">{je.date}</div>
+                </div>
+                <div className="flex gap-2">
+                  <span className={`text-xs px-2 py-1 rounded ${je.isInner?'bg-orange-100 text-orange-700':'bg-green-100 text-green-700'}`}>{je.isInner?'內帳傳票':'外帳傳票'}</span>
+                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">{je.type}</span>
+                </div>
+              </div>
+              <table className="w-full text-sm border-collapse">
+                <thead><tr className="bg-slate-50"><th className="text-left px-3 py-2 text-slate-600">科目</th><th className="text-right px-3 py-2 text-slate-600">借方</th><th className="text-right px-3 py-2 text-slate-600">貸方</th></tr></thead>
+                <tbody>
+                  {je.entries.map((e,i)=>(
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2">{e.account} {e.accountName}</td>
+                      <td className="px-3 py-2 text-right text-red-600">{e.debit>0?fmt(e.debit):''}</td>
+                      <td className="px-3 py-2 text-right text-emerald-600">{e.credit>0?fmt(e.credit):''}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <td className="px-3 py-2">合計</td>
+                    <td className="px-3 py-2 text-right text-red-600">{fmt(je.entries.reduce((a,b)=>a+b.debit,0))}</td>
+                    <td className="px-3 py-2 text-right text-emerald-600">{fmt(je.entries.reduce((a,b)=>a+b.credit,0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeView==='bank' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex gap-3 flex-wrap">
+            {BANKS.map(b=>(
+              <span key={b} className="bg-white border border-slate-200 rounded-full px-3 py-1 text-xs font-medium text-slate-600 cursor-pointer hover:bg-brand-50 hover:border-brand-300">
+                {b} ✓
+              </span>
+            ))}
+          </div>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>{['日期','摘要','入帳金額','銀行','對帳狀態'].map(h=>(
+                  <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600">{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {bankTransactions.map((t,i)=>(
+                  <tr key={i} className={`border-b border-slate-100 hover:bg-brand-50 ${i%2===0?'':'bg-slate-50/30'}`}>
+                    <td className="px-4 py-3 text-slate-500">{t.date}</td>
+                    <td className="px-4 py-3 text-slate-700">{t.desc}</td>
+                    <td className="px-4 py-3 font-medium text-emerald-600">{fmtCurrency(t.amount)}</td>
+                    <td className="px-4 py-3 text-slate-600">{t.bank}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.matched?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>
+                        {t.matched?'✓ 已對帳':'⚠ 未對帳'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TAB 3: CRM + LINE
+// ============================================================
+function TabCRM() {
+  const [customers, setCustomers] = useState(CUSTOMERS_SEED);
+  const [selected, setSelected] = useState(null);
+  const [lineCustomer, setLineCustomer] = useState(null);
+  const [search, setSearch] = useState('');
+  const [filterTag, setFilterTag] = useState('全部');
+  const [filterSales, setFilterSales] = useState('全部');
+  const [showTransfer, setShowTransfer] = useState(null);
+  const [transferTo, setTransferTo] = useState('');
+  const [lineMsg, setLineMsg] = useState('');
+  const [lineChat, setLineChat] = useState({});
+  const chatEndRef = useRef();
+
+  const allTags = ['全部','日本控','歐洲控','家庭旅遊','背包客','豪華旅遊','銀髮族','蜜月旅遊','學生族'];
+
+  const filtered = customers.filter(c=>{
+    if(search && !c.name.includes(search) && !c.phone.includes(search) && !c.lineId.includes(search)) return false;
+    if(filterTag!=='全部' && !c.tags.includes(filterTag)) return false;
+    if(filterSales!=='全部' && c.salesId!==filterSales) return false;
+    return true;
+  });
+
+  const isPassportExpiring = (expiry) => {
+    const d = new Date(expiry);
+    const now = new Date('2026-03-27');
+    const diff = (d-now)/(1000*60*60*24);
+    return diff < 180;
+  };
+
+  function sendLine(custId, msg) {
+    if(!msg.trim()) return;
+    setLineChat(prev=>({
+      ...prev,
+      [custId]: [...(prev[custId]||[]), { from:'staff', text:msg, time: new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) }]
+    }));
+    setLineMsg('');
+    setTimeout(()=>{
+      const replies = [
+        '好的，謝謝您的通知！',
+        '請問還有其他需要確認的事項嗎？',
+        '收到了，我這邊會確認一下。',
+        '感謝您的服務！這次行程很期待。',
+        '好的，我明白了，請問護照需要在什麼時候準備好？',
+      ];
+      setLineChat(prev=>({
+        ...prev,
+        [custId]: [...(prev[custId]||[]), { from:'client', text:randPick(replies), time: new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) }]
+      }));
+    }, 1200);
+  }
+
+  function handleTransfer() {
+    if(!transferTo) return;
+    setCustomers(prev=>prev.map(c=>c.id===showTransfer.id ? {...c, salesId:transferTo} : c));
+    setShowTransfer(null);
+  }
+
+  const custOrders = (custId) => ORDERS_SEED.filter(o=>o.customerId===custId);
+
+  return (
+    <div className="flex gap-4 h-[680px]">
+      {/* Customer List */}
+      <div className="w-96 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col">
+        <div className="p-3 border-b border-slate-100 space-y-2">
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜尋客戶..." className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+          <div className="flex gap-2">
+            <select value={filterTag} onChange={e=>setFilterTag(e.target.value)} className="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400">
+              {allTags.map(t=><option key={t}>{t}</option>)}
+            </select>
+            <select value={filterSales} onChange={e=>setFilterSales(e.target.value)} className="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400">
+              <option value="全部">全部業務</option>
+              {SALES_STAFF.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-y-auto scrollbar-thin flex-1">
+          {filtered.map(c=>(
+            <div key={c.id} onClick={()=>setSelected(c)} className={`px-4 py-3 border-b border-slate-100 cursor-pointer hover:bg-brand-50 transition-colors ${selected?.id===c.id?'bg-brand-50 border-l-4 border-l-brand-500':''}`}>
+              <div className="flex justify-between items-start">
+                <div className="font-medium text-slate-800">{c.name}</div>
+                <div className="text-xs text-slate-400">{SALES_STAFF.find(s=>s.id===c.salesId)?.name}</div>
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">{c.phone} · LINE: {c.lineId}</div>
+              <div className="flex gap-1 mt-1 flex-wrap">
+                {c.tags.map(t=><Pill key={t} label={t} color={tagColor(t)}/>)}
+                {isPassportExpiring(c.passExpiry) && <Pill label="⚠ 護照快到期" color="red"/>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-2 text-xs text-slate-400 border-t border-slate-100">{filtered.length} 位客戶</div>
+      </div>
+
+      {/* Customer Detail */}
+      <div className="flex-1 flex flex-col gap-4 min-w-0">
+        {selected ? (
+          <>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">{selected.name}</h3>
+                  <div className="text-sm text-slate-500 mt-1">{selected.phone} · {selected.lineId}</div>
+                  <div className="flex gap-1 mt-2 flex-wrap">
+                    {selected.tags.map(t=><Pill key={t} label={t} color={tagColor(t)}/>)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">總消費</div>
+                  <div className="text-lg font-bold text-brand-700">{fmtCurrency(selected.totalSpent)}</div>
+                  <div className="text-xs text-slate-500">{selected.orderCount} 次訂購</div>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-3 flex-wrap">
+                <div className="text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-500">護照效期：</span>
+                  <span className={`font-medium ${isPassportExpiring(selected.passExpiry)?'text-red-600':'text-slate-700'}`}>
+                    {selected.passExpiry} {isPassportExpiring(selected.passExpiry)?'⚠ 即將到期':''}
+                  </span>
+                </div>
+                <div className="text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-500">負責業務：</span>
+                  <span className="font-medium text-slate-700">{SALES_STAFF.find(s=>s.id===selected.salesId)?.name}</span>
+                </div>
+                <button onClick={()=>setShowTransfer(selected)} className="text-sm bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg px-3 py-2 font-medium transition-colors">
+                  轉移客戶
+                </button>
+                <button onClick={()=>setLineCustomer(selected)} className="text-sm bg-green-50 text-green-700 hover:bg-green-100 rounded-lg px-3 py-2 font-medium transition-colors">
+                  LINE 對話
+                </button>
+              </div>
+            </div>
+
+            {/* Order history */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex-1 overflow-hidden flex flex-col">
+              <div className="px-5 py-3 border-b border-slate-100 font-semibold text-slate-700">訂購紀錄</div>
+              <div className="overflow-y-auto scrollbar-thin flex-1">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50"><tr>{['日期','行程','人數','金額','狀態'].map(h=><th key={h} className="px-4 py-2 text-left font-medium text-slate-600">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {custOrders(selected.id).map(o=>(
+                      <tr key={o.id} className="border-b border-slate-100 hover:bg-brand-50">
+                        <td className="px-4 py-2 text-slate-500">{o.depDate}</td>
+                        <td className="px-4 py-2 text-slate-700">{o.packageName}</td>
+                        <td className="px-4 py-2 text-center">{o.pax}</td>
+                        <td className="px-4 py-2 text-slate-700">{fmtCurrency(o.total)}</td>
+                        <td className="px-4 py-2"><StatusBadge status={o.status}/></td>
+                      </tr>
+                    ))}
+                    {custOrders(selected.id).length===0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">無訂單紀錄</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-slate-400">
+            點選左側客戶查看詳情
+          </div>
+        )}
+      </div>
+
+      {/* LINE Chat */}
+      {lineCustomer && (
+        <div className="w-80 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col">
+          <div className="bg-green-500 text-white px-4 py-3 rounded-t-xl flex justify-between items-center">
+            <div>
+              <div className="font-bold text-sm">{lineCustomer.name}</div>
+              <div className="text-xs opacity-75">{lineCustomer.lineId}</div>
+            </div>
+            <button onClick={()=>setLineCustomer(null)} className="text-white/75 hover:text-white text-xl leading-none">&times;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2 bg-green-50">
+            {(lineChat[lineCustomer.id]||[{ from:'system', text:'對話開始', time:'' }]).map((m,i)=>(
+              <div key={i} className={`flex ${m.from==='staff'?'justify-end':m.from==='system'?'justify-center':'justify-start'}`}>
+                {m.from==='system' ? (
+                  <span className="text-xs text-slate-400">{m.text}</span>
+                ) : (
+                  <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${m.from==='staff'?'bg-green-500 text-white':'bg-white text-slate-800 shadow-sm'}`}>
+                    {m.text}
+                    <div className={`text-xs mt-0.5 ${m.from==='staff'?'text-green-100':'text-slate-400'}`}>{m.time}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={chatEndRef}/>
+          </div>
+          <div className="p-3 border-t border-slate-100 flex gap-2">
+            <input value={lineMsg} onChange={e=>setLineMsg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendLine(lineCustomer.id,lineMsg)} placeholder="傳送訊息..." className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+            <button onClick={()=>sendLine(lineCustomer.id,lineMsg)} className="bg-green-500 text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-green-600 transition-colors">送出</button>
+          </div>
+          <div className="px-3 pb-3 flex gap-2 flex-wrap">
+            {['確認訂金已收到','請準備護照','出發倒數3天提醒','滿意度調查'].map(t=>(
+              <button key={t} onClick={()=>sendLine(lineCustomer.id,t)} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full hover:bg-green-100 hover:text-green-700 transition-colors">{t}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Modal */}
+      {showTransfer && (
+        <Modal title={`轉移客戶 — ${showTransfer.name}`} onClose={()=>setShowTransfer(null)} size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">目前業務：<strong>{SALES_STAFF.find(s=>s.id===showTransfer.salesId)?.name}</strong></p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">轉移至</label>
+              <div className="space-y-2">
+                {SALES_STAFF.filter(s=>s.id!==showTransfer.salesId).map(s=>(
+                  <label key={s.id} className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${transferTo===s.id?'border-brand-500 bg-brand-50':'border-slate-200 hover:border-brand-300'}`}>
+                    <input type="radio" value={s.id} checked={transferTo===s.id} onChange={e=>setTransferTo(e.target.value)} className="text-brand-600" />
+                    <div>
+                      <div className="font-medium text-slate-800">{s.name}</div>
+                      <div className="text-xs text-slate-500">{s.phone}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={()=>setShowTransfer(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">取消</button>
+              <button onClick={handleTransfer} disabled={!transferTo} className="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">確認轉移</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TAB 4: DOCUMENTS + OCR
+// ============================================================
+function TabDocuments() {
+  const [docs, setDocs] = useState(()=>{
+    return ORDERS_SEED.flatMap(o=>o.passengers.map(p=>({
+      id: `DOC-${o.id}-${p.passport}`,
+      orderId: o.id,
+      groupNo: o.groupNo,
+      passengerName: p.name,
+      passport: p.passport,
+      birth: p.birth,
+      dest: o.dest,
+      depDate: o.depDate,
+      passExpiry: `${randInt(2025,2030)}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`,
+      visaStatus: randPick(['已辦','未辦','不需要']),
+      twPassport: Math.random()>0.3,
+      hasVisa: Math.random()>0.4,
+      hasInsurance: Math.random()>0.5,
+    })));
+  });
+  const [showOcr, setShowOcr] = useState(false);
+  const [ocrStep, setOcrStep] = useState(0);
+  const [ocrResult, setOcrResult] = useState(null);
+  const [filter, setFilter] = useState('全部');
+  const [search, setSearch] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('全部');
+
+  const today = new Date('2026-03-27');
+  const groups = ['全部',...new Set(docs.map(d=>d.groupNo))].slice(0,20);
+
+  const filtered = docs.filter(d=>{
+    if(search && !d.passengerName.includes(search) && !d.passport.includes(search)) return false;
+    if(filter==='護照到期' && (new Date(d.passExpiry)-today)/(1000*60*60*24) >= 180) return false;
+    if(filter==='簽證未辦' && d.visaStatus!=='未辦') return false;
+    if(selectedGroup!=='全部' && d.groupNo!==selectedGroup) return false;
+    return true;
+  });
+
+  const isExpiring = (expiry) => {
+    const diff = (new Date(expiry)-today)/(1000*60*60*24);
+    return diff < 180;
+  };
+
+  function runOcr() {
+    setOcrStep(1);
+    setTimeout(()=>setOcrStep(2), 800);
+    setTimeout(()=>setOcrStep(3), 1600);
+    setTimeout(()=>{
+      setOcrStep(4);
+      setOcrResult({
+        surname: 'CHEN',
+        givenName: 'YI JUN',
+        nameCn: '陳怡君',
+        passport: `A${randInt(10000000,99999999)}`,
+        birth: `${randInt(1975,2000)}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`,
+        expiry: `${randInt(2027,2032)}-${padZ(randInt(1,12))}-${padZ(randInt(1,28))}`,
+        nationality: 'TWN',
+      });
+    }, 2400);
+  }
+
+  const groupDocs = (gNo) => docs.filter(d=>d.groupNo===gNo);
+  const checklistGroups = [...new Set(docs.map(d=>d.groupNo))].slice(0,5);
+
+  return (
+    <div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label:'總旅客證件', value:docs.length, icon:'📄', color:'bg-brand-600' },
+          { label:'護照快到期', value:docs.filter(d=>isExpiring(d.passExpiry)).length, icon:'⚠️', color:'bg-red-500' },
+          { label:'簽證未辦', value:docs.filter(d=>d.visaStatus==='未辦').length, icon:'📋', color:'bg-amber-500' },
+          { label:'資料完整', value:docs.filter(d=>d.twPassport&&d.hasVisa||d.visaStatus==='不需要').length, icon:'✅', color:'bg-emerald-600' },
+        ].map(s=>(
+          <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-3">
+            <div className={`${s.color} text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl`}>{s.icon}</div>
+            <div>
+              <div className="text-xs text-slate-500">{s.label}</div>
+              <div className="text-lg font-bold text-slate-800">{s.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-4">
+        {/* Main content */}
+        <div className="flex-1">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜尋旅客、護照號..." className="border border-slate-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-40 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            <select value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+              {groups.map(g=><option key={g}>{g}</option>)}
+            </select>
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+              {['全部','護照到期','簽證未辦'].map(f=>(
+                <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${filter===f?'bg-white shadow text-brand-700':'text-slate-500'}`}>{f}</button>
+              ))}
+            </div>
+            <button onClick={()=>{setShowOcr(true);setOcrStep(0);setOcrResult(null);}} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+              📷 護照 OCR 掃描
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>{['旅客姓名','護照號碼','出生日期','護照效期','目的地','出發日','簽證','保險','出團備妥'].map(h=>(
+                    <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {filtered.slice(0,50).map((d,i)=>(
+                    <tr key={d.id} className={`border-b border-slate-100 hover:bg-brand-50 ${i%2===0?'':'bg-slate-50/30'}`}>
+                      <td className="px-4 py-3 font-medium text-slate-800">{d.passengerName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{d.passport}</td>
+                      <td className="px-4 py-3 text-slate-600">{d.birth}</td>
+                      <td className={`px-4 py-3 font-medium ${isExpiring(d.passExpiry)?'text-red-600':'text-slate-700'}`}>
+                        {d.passExpiry} {isExpiring(d.passExpiry)&&'⚠'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{d.dest}</td>
+                      <td className="px-4 py-3 text-slate-600">{d.depDate}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${d.visaStatus==='已辦'?'bg-emerald-100 text-emerald-700':d.visaStatus==='不需要'?'bg-slate-100 text-slate-600':'bg-red-100 text-red-700'}`}>
+                          {d.visaStatus}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${d.hasInsurance?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-400'}`}>
+                          {d.hasInsurance?'已投保':'未投保'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-lg">
+                        {d.twPassport && (d.visaStatus!=='未辦') && d.hasInsurance ? '✅' : '⚠️'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Group Checklist */}
+        <div className="w-72 flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100">
+            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-slate-700">出團檢核表</div>
+            <div className="overflow-y-auto max-h-[600px] scrollbar-thin">
+              {checklistGroups.map(gNo=>{
+                const gDocs = groupDocs(gNo);
+                const ready = gDocs.filter(d=>d.twPassport&&d.visaStatus!=='未辦').length;
+                return (
+                  <div key={gNo} className="px-4 py-3 border-b border-slate-100">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-mono text-xs font-bold text-slate-700">{gNo}</div>
+                      <div className={`text-xs font-medium ${ready===gDocs.length?'text-emerald-600':'text-amber-600'}`}>
+                        {ready}/{gDocs.length} 完備
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {gDocs.slice(0,5).map(d=>(
+                        <div key={d.id} className="flex justify-between text-xs">
+                          <span className="text-slate-600">{d.passengerName}</span>
+                          <div className="flex gap-1">
+                            <span title="護照" className={d.twPassport?'text-emerald-500':'text-red-400'}>🛂</span>
+                            <span title="簽證" className={d.visaStatus!=='未辦'?'text-emerald-500':'text-red-400'}>📋</span>
+                            <span title="保險" className={d.hasInsurance?'text-emerald-500':'text-slate-300'}>🛡</span>
+                          </div>
+                        </div>
+                      ))}
+                      {gDocs.length>5 && <div className="text-xs text-slate-400 text-center">...共 {gDocs.length} 人</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* OCR Modal */}
+      {showOcr && (
+        <Modal title="護照 OCR 掃描" onClose={()=>setShowOcr(false)} size="md">
+          <div className="space-y-4">
+            <div className="border-2 border-dashed border-brand-300 rounded-xl p-8 text-center cursor-pointer hover:bg-brand-50 transition-colors" onClick={ocrStep===0?runOcr:undefined}>
+              {ocrStep===0 && (
+                <div>
+                  <div className="text-4xl mb-3">📷</div>
+                  <div className="text-slate-600 font-medium">點擊此處上傳護照圖片</div>
+                  <div className="text-xs text-slate-400 mt-1">支援 JPG / PNG / PDF</div>
+                  <button onClick={runOcr} className="mt-3 bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
+                    模擬掃描（Demo）
+                  </button>
+                </div>
+              )}
+              {ocrStep===1 && <div className="text-slate-600"><div className="text-3xl mb-2 animate-bounce">🔍</div>偵測護照位置中...</div>}
+              {ocrStep===2 && <div className="text-slate-600"><div className="text-3xl mb-2 animate-pulse">🤖</div>AI OCR 辨識中...</div>}
+              {ocrStep===3 && <div className="text-slate-600"><div className="text-3xl mb-2">✨</div>資料解析中...</div>}
+              {ocrStep===4 && ocrResult && (
+                <div className="text-left">
+                  <div className="flex items-center gap-2 mb-3 text-emerald-600 font-medium">
+                    <span>✅</span> OCR 辨識完成！
+                  </div>
+                  <div className="bg-slate-800 text-green-400 font-mono text-xs p-3 rounded-lg mb-4">
+                    {`Surname: ${ocrResult.surname}\nGiven Names: ${ocrResult.givenName}\nPassport No: ${ocrResult.passport}\nDate of Birth: ${ocrResult.birth}\nDate of Expiry: ${ocrResult.expiry}\nNationality: ${ocrResult.nationality}`}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ['中文姓名', ocrResult.nameCn],
+                      ['護照號碼', ocrResult.passport],
+                      ['出生日期', ocrResult.birth],
+                      ['護照效期', ocrResult.expiry],
+                      ['英文姓', ocrResult.surname],
+                      ['英文名', ocrResult.givenName],
+                    ].map(([k,v])=>(
+                      <div key={k} className="bg-white border border-slate-200 rounded-lg p-2">
+                        <div className="text-xs text-slate-500">{k}</div>
+                        <div className="font-medium text-slate-800 text-sm">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="mt-4 w-full bg-brand-600 hover:bg-brand-700 text-white py-2 rounded-lg text-sm font-medium">
+                    自動填入旅客資料
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TAB 5: REPORTS
+// ============================================================
+function TabReports() {
+  const [activeReport, setActiveReport] = useState('monthly');
+
+  // Monthly revenue by month
+  const monthlyData = (() => {
+    const m = {};
+    ORDERS_SEED.forEach(o=>{
+      if(o.paid > 0) {
+        const key = o.orderDate.substring(0,7);
+        m[key] = (m[key]||0) + o.paid;
+      }
+    });
+    return Object.entries(m).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({ month:k, revenue:v }));
+  })();
+  const maxRev = Math.max(...monthlyData.map(d=>d.revenue));
+
+  // Destination ranking
+  const destData = (() => {
+    const m = {};
+    ORDERS_SEED.forEach(o=>{ m[o.dest] = (m[o.dest]||0) + 1; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({ dest:k, count:v }));
+  })();
+  const maxDest = Math.max(...destData.map(d=>d.count));
+
+  // Sales ranking
+  const salesData = (() => {
+    const m = {};
+    ORDERS_SEED.forEach(o=>{ m[o.salesId] = (m[o.salesId]||{count:0,revenue:0}); m[o.salesId].count+=1; m[o.salesId].revenue+=o.paid; });
+    return Object.entries(m).sort((a,b)=>b[1].revenue-a[1].revenue).map(([k,v])=>({ ...v, id:k, name:SALES_STAFF.find(s=>s.id===k)?.name||k }));
+  })();
+  const maxSalesRev = Math.max(...salesData.map(d=>d.revenue));
+
+  // P&L
+  const totalRevenue = ORDERS_SEED.filter(o=>o.paid>0).reduce((a,b)=>a+b.paid,0);
+  const totalCost = ORDERS_SEED.filter(o=>o.status==='已出團'||o.status==='已結團').reduce((a,b)=>{
+    const pkg = PACKAGES.find(p=>p.id===b.packageId);
+    return a + (pkg?pkg.cost*b.pax:b.total*0.75);
+  },0);
+  const opExpense = Math.round(totalRevenue * 0.08);
+  const grossProfit = totalRevenue - totalCost;
+  const netProfit = grossProfit - opExpense;
+
+  // AR/AP Aging
+  const arAging = { '0-30天': 0, '31-60天': 0, '61-90天': 0, '90天以上': 0 };
+  ORDERS_SEED.filter(o=>o.paid<o.total).forEach(o=>{
+    const diff = Math.floor((new Date('2026-03-27')-new Date(o.orderDate))/(1000*60*60*24));
+    if(diff<=30) arAging['0-30天']+=o.total-o.paid;
+    else if(diff<=60) arAging['31-60天']+=o.total-o.paid;
+    else if(diff<=90) arAging['61-90天']+=o.total-o.paid;
+    else arAging['90天以上']+=o.total-o.paid;
+  });
+
+  return (
+    <div>
+      {/* Report tabs */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {[['monthly','月營收統計'],['dest','目的地排行'],['sales','業務業績'],['pnl','損益表'],['aging','帳齡分析']].map(([v,l])=>(
+          <button key={v} onClick={()=>setActiveReport(v)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeReport===v?'bg-brand-600 text-white shadow':'bg-white text-slate-600 border border-slate-200 hover:bg-brand-50'}`}>{l}</button>
+        ))}
+      </div>
+
+      {activeReport==='monthly' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          <h3 className="font-bold text-slate-800 mb-6">月營收統計</h3>
+          <div className="space-y-3">
+            {monthlyData.map(d=>(
+              <div key={d.month} className="flex items-center gap-4">
+                <div className="w-16 text-xs text-slate-500 text-right">{d.month}</div>
+                <div className="flex-1 bg-slate-100 rounded-full h-8 overflow-hidden">
+                  <div className="bg-gradient-to-r from-brand-500 to-brand-600 h-full rounded-full flex items-center px-3 transition-all" style={{width:`${Math.max(5,(d.revenue/maxRev)*100)}%`}}>
+                    <span className="text-white text-xs font-medium whitespace-nowrap">{fmtCurrency(d.revenue)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-xs text-slate-500">總收款</div>
+              <div className="text-xl font-bold text-brand-700">{fmtCurrency(totalRevenue)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">月均收款</div>
+              <div className="text-xl font-bold text-slate-700">{fmtCurrency(Math.round(totalRevenue/monthlyData.length))}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">最高月份</div>
+              <div className="text-xl font-bold text-emerald-600">{monthlyData.sort((a,b)=>b.revenue-a.revenue)[0]?.month}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeReport==='dest' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          <h3 className="font-bold text-slate-800 mb-6">熱門目的地排行</h3>
+          <div className="space-y-4">
+            {destData.map((d,i)=>(
+              <div key={d.dest} className="flex items-center gap-4">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${i===0?'bg-amber-400 text-white':i===1?'bg-slate-400 text-white':i===2?'bg-orange-400 text-white':'bg-slate-100 text-slate-600'}`}>{i+1}</div>
+                <div className="w-16 text-sm font-medium text-slate-700">{d.dest}</div>
+                <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
+                  <div className="bg-gradient-to-r from-cyan-400 to-brand-500 h-full rounded-full flex items-center px-3" style={{width:`${Math.max(5,(d.count/maxDest)*100)}%`}}>
+                    <span className="text-white text-xs font-bold">{d.count} 團</span>
+                  </div>
+                </div>
+                <div className="text-sm text-slate-500 w-16 text-right">{Math.round(d.count/ORDERS_SEED.length*100)}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeReport==='sales' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          <h3 className="font-bold text-slate-800 mb-6">業務業績排行</h3>
+          <div className="space-y-4">
+            {salesData.map((s,i)=>(
+              <div key={s.id} className="flex items-center gap-4">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${i===0?'bg-amber-400 text-white':i===1?'bg-slate-400 text-white':i===2?'bg-orange-400 text-white':'bg-slate-100 text-slate-600'}`}>{i+1}</div>
+                <div className="w-14 text-sm font-medium text-slate-700">{s.name}</div>
+                <div className="flex-1 bg-slate-100 rounded-full h-8 overflow-hidden">
+                  <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full flex items-center px-3" style={{width:`${Math.max(5,(s.revenue/maxSalesRev)*100)}%`}}>
+                    <span className="text-white text-xs font-medium whitespace-nowrap">{fmtCurrency(s.revenue)}</span>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-400">{s.count} 單</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeReport==='pnl' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 max-w-2xl">
+          <h3 className="font-bold text-slate-800 mb-2">損益表（旅行社版）</h3>
+          <div className="text-xs text-slate-400 mb-6">期間：2025/11/01 ~ 2026/03/27</div>
+          <div className="space-y-2 text-sm">
+            {[
+              { label:'營業收入（含稅）', value:totalRevenue, indent:0, bold:true },
+              { label:'  — 團費收入（4101）', value:Math.round(totalRevenue*0.8), indent:1 },
+              { label:'  — 機票代收（4102）', value:Math.round(totalRevenue*0.12), indent:1 },
+              { label:'  — 簽證代收（4103）', value:Math.round(totalRevenue*0.08), indent:1 },
+              { label:'減：營業成本', value:-totalCost, indent:0, bold:true },
+              { label:'  — 航空公司（5101）', value:-Math.round(totalCost*0.4), indent:1 },
+              { label:'  — 飯店（5102）', value:-Math.round(totalCost*0.35), indent:1 },
+              { label:'  — 地接（5103）', value:-Math.round(totalCost*0.2), indent:1 },
+              { label:'  — 簽證費（5104）', value:-Math.round(totalCost*0.05), indent:1 },
+              { label:'毛利', value:grossProfit, indent:0, bold:true, highlight:'emerald' },
+              { label:'毛利率', value:`${Math.round(grossProfit/totalRevenue*100)}%`, indent:0, isText:true },
+              { label:'減：營業費用', value:-opExpense, indent:0, bold:true },
+              { label:'  — 管理費', value:-Math.round(opExpense*0.5), indent:1 },
+              { label:'  — 行銷費', value:-Math.round(opExpense*0.3), indent:1 },
+              { label:'  — 其他費用', value:-Math.round(opExpense*0.2), indent:1 },
+              { label:'稅前淨利', value:netProfit, indent:0, bold:true, highlight: netProfit>0?'emerald':'red' },
+              { label:'淨利率', value:`${Math.round(netProfit/totalRevenue*100)}%`, indent:0, isText:true },
+            ].map((row,i)=>(
+              <div key={i} className={`flex justify-between py-1.5 ${row.highlight?`border-t-2 border-slate-200 ${row.highlight==='emerald'?'text-emerald-700':'text-red-600'}`:'border-b border-slate-100'} ${row.bold?'font-bold':'text-slate-600'} ${row.indent?'pl-4 text-slate-500':''}`}>
+                <span>{row.label}</span>
+                <span className={`tabular-nums ${!row.isText&&row.value<0?'text-red-500':!row.isText&&row.value>0?'text-slate-800':''}`}>
+                  {row.isText ? row.value : fmtCurrency(Math.abs(row.value))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeReport==='aging' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          <h3 className="font-bold text-slate-800 mb-6">應收帳款帳齡分析</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {Object.entries(arAging).map(([k,v])=>(
+              <div key={k} className={`rounded-xl p-4 text-center ${k==='90天以上'?'bg-red-50 border-2 border-red-200':'bg-slate-50 border border-slate-200'}`}>
+                <div className="text-xs text-slate-500 mb-1">{k}</div>
+                <div className={`text-lg font-bold ${k==='90天以上'?'text-red-600':'text-slate-800'}`}>{fmtCurrency(v)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>{['客戶','行程','訂單日','應收','已付','未付','帳齡'].map(h=><th key={h} className="px-4 py-3 text-left font-semibold text-slate-600">{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {ORDERS_SEED.filter(o=>o.paid<o.total).slice(0,20).map((o,i)=>{
+                  const diff = Math.floor((new Date('2026-03-27')-new Date(o.orderDate))/(1000*60*60*24));
+                  const ageColor = diff>90?'text-red-600':diff>60?'text-amber-600':'text-slate-600';
+                  return (
+                    <tr key={o.id} className={`border-b border-slate-100 hover:bg-brand-50 ${i%2===0?'':'bg-slate-50/30'}`}>
+                      <td className="px-4 py-3 font-medium text-slate-800">{o.customerName}</td>
+                      <td className="px-4 py-3 text-slate-600 max-w-40 truncate">{o.packageName}</td>
+                      <td className="px-4 py-3 text-slate-500">{o.orderDate}</td>
+                      <td className="px-4 py-3 font-medium">{fmtCurrency(o.total)}</td>
+                      <td className="px-4 py-3 text-emerald-600">{fmtCurrency(o.paid)}</td>
+                      <td className="px-4 py-3 text-red-500 font-medium">{fmtCurrency(o.total-o.paid)}</td>
+                      <td className={`px-4 py-3 font-bold ${ageColor}`}>{diff} 天</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// APP ROOT
+// ============================================================
+const TABS = [
+  { id:'orders', label:'訂單管理', icon:'🗓', component:TabOrders },
+  { id:'finance', label:'財務帳務', icon:'💰', component:TabFinance },
+  { id:'crm', label:'客戶 CRM', icon:'👥', component:TabCRM },
+  { id:'docs', label:'證件管理', icon:'📄', component:TabDocuments },
+  { id:'reports', label:'報表分析', icon:'📊', component:TabReports },
+];
+
+function App() {
+  const [activeTab, setActiveTab] = useState('orders');
+
+  const current = TABS.find(t=>t.id===activeTab);
+  const Component = current?.component;
+
+  return (
+    <div className="min-h-screen bg-brand-50">
+      {/* Header */}
+      <header className="bg-brand-900 text-white shadow-xl sticky top-0 z-40">
+        <div className="max-w-screen-xl mx-auto px-4">
+          <div className="flex items-center gap-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-brand-500 rounded-xl p-2 text-xl">✈️</div>
+              <div>
+                <div className="font-bold text-lg leading-tight tracking-wide">旅航 ERP</div>
+                <div className="text-xs text-brand-300">旅行社管理系統 v1.0 POC</div>
+              </div>
+            </div>
+            <nav className="flex gap-1 ml-4 overflow-x-auto scrollbar-thin flex-1">
+              {TABS.map(t=>(
+                <button key={t.id} onClick={()=>setActiveTab(t.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab===t.id?'bg-brand-600 text-white shadow-lg':'text-brand-200 hover:bg-brand-800 hover:text-white'}`}>
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="ml-auto flex items-center gap-3 flex-shrink-0">
+              <div className="text-right hidden md:block">
+                <div className="text-sm font-medium">陳怡君</div>
+                <div className="text-xs text-brand-300">系統管理員</div>
+              </div>
+              <div className="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center font-bold text-sm">陳</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="max-w-screen-xl mx-auto px-4 py-6">
+        {Component && <Component />}
+      </main>
+
+      {/* Footer */}
+      <footer className="text-center py-6 text-xs text-slate-400 border-t border-slate-200 mt-8">
+        旅航 ERP POC — 旅行社管理系統示範版 · 2026
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
